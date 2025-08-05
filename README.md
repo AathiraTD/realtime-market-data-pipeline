@@ -50,20 +50,22 @@ Most trading teams still wake up to **yesterday’s** prices. This repo shrinks 
 
 ```mermaid
 flowchart LR
-    subgraph Extract
-        A[Market APIs]
-    end
-    subgraph Orchestrate
-        B[Airflow<br/>hourly DAGs]
-    end
-    subgraph Transform
-        C[Snowflake<br/>(raw → models)]
-    end
-    subgraph Visualise
-        D[Superset Dashboards]
-    end
-    A --> B --> C --> D
-    B --> E[Slack Alerts]
+  subgraph Extract
+    A[Market APIs]
+  end
+  subgraph Orchestrate
+    B[Airflow
+(hourly DAGs)]
+  end
+  subgraph Transform
+    C[Snowflake
+(raw to models)]
+  end
+  subgraph Visualise
+    D[Superset Dashboards]
+  end
+  A --> B --> C --> D
+  B --> E[Slack Alerts]
 ```
 
 > **Tip /** Add your own PNG/SVG architecture diagram to [`docs/`](docs/) and embed it here for extra clarity.
