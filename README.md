@@ -1,139 +1,187 @@
-# realtime-market-data-pipeline
+# Realtime Market Data Pipeline ⚡️📈
 
-*A 45-minute refresh cycle for live FTSE equities and FX rates*
+[![Build & Test](https://img.shields.io/github/actions/workflow/status/your-org/realtime-market-data-pipeline/ci.yml?branch=main\&style=flat-square)](../../actions)
+[![Docker Pulls](https://img.shields.io/docker/pulls/your-org/realtime-market-data-pipeline?style=flat-square)](https://hub.docker.com/r/your-org/realtime-market-data-pipeline)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](LICENSE)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square)](CONTRIBUTING.md)
 
----
-
-## 1 · Why this project exists
-
-Most trading teams still wake up to yesterday’s prices. This repo turns **24-hour lag into sub-hour insight**, so risk, P\&L, and exposure dashboards stay current without blowing up cloud spend.
-
----
-
-## 2 · What it delivers
-
-| Capability             | In plain English                                                             |
-| ---------------------- | ---------------------------------------------------------------------------- |
-| **Live data feed**     | Pulls UK stock (FTSE) and major currency prices every hour.                  |
-| **Fast transform**     | Cleans and reshapes raw ticks in Snowflake in minutes, not hours.            |
-| **Instant visibility** | Updates Superset dashboards automatically; no manual refresh needed.         |
-| **Heads-up alerts**    | Sends a Slack ping if a job is late or data looks off.                       |
-| **Zero waste**         | Auto-scales Snowflake compute only when work is running, so no idle charges. |
+> **Turn *yesterday’s* prices into *sub‑hour* insights — without torching your Snowflake bill.**
 
 ---
 
-## 3 · How it works (high-level)
+## 📑 Table of Contents
 
+1. [Why it exists](#-why-it-exists)
+2. [What it delivers](#-what-it-delivers)
+3. [How it works](#-how-it-works)
+4. [Quick start](#-quick-start)
+5. [Repository layout](#-repository-layout)
+6. [Configuration](#-configuration)
+7. [Daily schedule](#-daily-schedule)
+8. [Extending the pipeline](#-extending-the-pipeline)
+9. [Troubleshooting](#-troubleshooting)
+10. [Contributing](#-contributing)
+11. [License](#-license)
+12. [Maintainers](#-maintainers)
+
+---
+
+## 🧐 Why it exists
+
+Most trading teams still wake up to **yesterday’s** prices. This repo shrinks the *24‑hour lag* to **<45 minutes**, so your risk, P\&L, and exposure dashboards stay current *and* cost‑efficient.
+
+---
+
+## 🚀 What it delivers
+
+|  Capability            |  Plain English                                             |  Tech Highlights              |
+| ---------------------- | ---------------------------------------------------------- | ----------------------------- |
+| **Live data feed**     | Pulls UK stock (FTSE) & major FX rates every *15 minutes*. | Airflow + Python operators    |
+| **Fast transform**     | Cleans & reshapes raw ticks in minutes, not hours.         | dbt models on Snowflake       |
+| **Instant visibility** | Dashboards auto‑refresh — no manual clicks.                | Superset auto‑update          |
+| **Heads‑up alerts**    | Slack pings if a job is late or data looks off.            | Airflow SLA & dbt tests       |
+| **Zero waste**         | Snowflake compute auto‑scales *only* when needed.          | Warehouse auto‑suspend (60 s) |
+
+*\~18 k rows ingested per run → ≈100 k processed daily.*
+
+---
+
+## 🛠️ How it works
+
+```mermaid
+flowchart LR
+    subgraph Extract
+        A[Market APIs]
+    end
+    subgraph Orchestrate
+        B[Airflow<br/>hourly DAGs]
+    end
+    subgraph Transform
+        C[Snowflake<br/>(raw → models)]
+    end
+    subgraph Visualise
+        D[Superset Dashboards]
+    end
+    A --> B --> C --> D
+    B --> E[Slack Alerts]
 ```
-Market APIs  ─▶  Airflow (hourly DAGs)  ─▶  Snowflake (raw ➜ models)  ─▶  Superset dashboards
-                                    │
-                                    └──▶  Slack alerts (failures, anomalies)
-```
 
-*18 k rows ingested per run, \~100 k processed daily.*
+> **Tip /** Add your own PNG/SVG architecture diagram to [`docs/`](docs/) and embed it here for extra clarity.
 
 ---
 
-## 4 · Quick start
+## ⚡ Quick start
 
-> **Prerequisites** – Docker & Docker Compose, a Snowflake account, and API keys for your data provider.
+> **Prerequisites** — Docker & Docker Compose, a Snowflake account, and API keys from your market‑data provider.
 
 ```bash
-# 1. Clone the repo
-git clone https://github.com/your-org/realtime-market-data-pipeline.git
-cd realtime-market-data-pipeline
+# 1. Clone the repo
+$ git clone https://github.com/your-org/realtime-market-data-pipeline.git
+$ cd realtime-market-data-pipeline
 
-# 2. Set secrets (edit .env with your creds)
-cp .env.example .env
+# 2. Configure secrets (edit .env with your creds)
+$ cp .env.example .env
+$ ${EDITOR:-nano} .env
 
-# 3. Fire it up
-docker compose up -d airflow superset
+# 3. Spin up local stack (Airflow + Superset)
+$ docker compose up -d airflow superset
 
-# 4. Run the bootstrap DAG to create tables & models
-docker compose exec airflow airflow dags trigger bootstrap_init
+# 4. Bootstrap Snowflake tables & models
+$ docker compose exec airflow airflow dags trigger bootstrap_init
 ```
 
-* Airflow UI → `http://localhost:8080` (`airflow / airflow`)
-* Superset UI → `http://localhost:8088` (`admin / admin`)
+|  Service   |  URL                                           |  Login              |
+| ---------- | ---------------------------------------------- | ------------------- |
+|  Airflow   | [http://localhost:8080](http://localhost:8080) | `airflow / airflow` |
+|  Superset  | [http://localhost:8088](http://localhost:8088) | `admin / admin`     |
 
 ---
 
-## 5 · Repository layout
+## 📂 Repository layout
 
-```
+```text
 .
-├─ dags/              # Airflow DAG definitions
-├─ dbt/               # Data models and tests
-├─ superset/          # Dashboard JSON exports
-├─ docker-compose.yml # One-command local stack
-└─ docs/              # Architecture diagrams & ADRs
+├─ dags/              # Airflow DAG definitions
+├─ dbt/               # Data models & tests
+├─ superset/          # Dashboard JSON exports
+├─ docker-compose.yml # One‑command local stack
+└─ docs/              # Architecture diagrams, ADRs & slides
 ```
 
 ---
 
-## 6 · Configuration
-
-| Variable                                | Purpose                              |
-| --------------------------------------- | ------------------------------------ |
-| `SNOWFLAKE_ACCOUNT`                     | Your Snowflake account identifier    |
-| `SNOWFLAKE_USER` / `SNOWFLAKE_PASSWORD` | Warehouse login                      |
-| `FTSE_API_KEY` / `FX_API_KEY`           | Market-data provider creds           |
-| `SLACK_WEBHOOK_URL`                     | Channel for success / failure alerts |
+## 🔧 Configuration
 
 Edit `.env` (never commit real secrets).
 
----
-
-## 7 · Daily schedule
-
-| Time (UTC)               | Task                                               |
-| ------------------------ | -------------------------------------------------- |
-| **00, 15, 30, 45 min**   | `ingest_ftse`, `ingest_fx` pull fresh prices       |
-| **15 min past the hour** | `dbt_run` transforms & tests data                  |
-| **On-event**             | `notify_slack` fires if any SLA or data test fails |
+|  Variable                               |  Purpose                             |
+| --------------------------------------- | ------------------------------------ |
+| `SNOWFLAKE_ACCOUNT`                     | Snowflake account identifier         |
+| `SNOWFLAKE_USER` / `SNOWFLAKE_PASSWORD` | Warehouse login                      |
+| `FTSE_API_KEY` / `FX_API_KEY`           | Market‑data provider creds           |
+| `SLACK_WEBHOOK_URL`                     | Channel for success / failure alerts |
 
 ---
 
-## 8 · Extending the pipeline
+## ⏰ Daily schedule
 
-| Need                              | Where to start                                                 |
-| --------------------------------- | -------------------------------------------------------------- |
-| Add another market (e.g., NASDAQ) | Duplicate a DAG in `dags/` and adjust API client               |
-| More frequent loads               | Change the `schedule_interval` cron in the DAG                 |
-| Deploy to AWS                     | Use the `deploy/` compose file → ECS Fargate or EKS            |
-| Cost breakdown                    | Enable `WAREHOUSE_USAGE_HISTORY` view and add a Superset chart |
+|  UTC Time              |  Task                                                   |
+| ---------------------- | ------------------------------------------------------- |
+| **00, 15, 30, 45 min** | `ingest_ftse`, `ingest_fx` pull fresh prices            |
+| **+15 min**            | `dbt_run` transforms & tests data                       |
+| **On event**           | `notify_slack` fires on any SLA or data‑quality failure |
 
----
-
-## 9 · Troubleshooting
-
-| Symptom                        | Likely cause             | Fix                                                     |
-| ------------------------------ | ------------------------ | ------------------------------------------------------- |
-| Airflow task stuck in *queued* | Docker memory low        | Allocate ≥4 GB RAM                                      |
-| Dashboards stale               | `dbt_run` failed QC test | Check Slack alert, rerun DAG                            |
-| Snowflake bill spikes          | Warehouse left running   | Confirm `auto-suspend=60s` in `snowflake/warehouse.sql` |
+> Change the cron in `dags/` if you need a different cadence.
 
 ---
 
-## 10 · Contributing
+## ➕ Extending the pipeline
 
-1. Fork & create a feature branch.
+|  Need                             |  Where to start                                             |
+| --------------------------------- | ----------------------------------------------------------- |
+| Add another market (e.g., NASDAQ) | Duplicate & tweak a DAG in `dags/`                          |
+| Increase load frequency           | Update `schedule_interval` cron                             |
+| Deploy to AWS                     | Use `deploy/docker-compose.aws.yml` with ECS Fargate or EKS |
+| Cost breakdown                    | Enable `WAREHOUSE_USAGE_HISTORY` view + Superset chart      |
+
+---
+
+## 🛠️ Troubleshooting
+
+<details>
+  <summary>Click to expand common issues</summary>
+
+|  Symptom                         |  Likely Cause            |  Fix                                                    |
+| -------------------------------- | ------------------------ | ------------------------------------------------------- |
+| Airflow task stuck in **queued** | Docker memory low        | Allocate ≥4 GB RAM                                      |
+| Dashboards stale                 | `dbt_run` failed QC test | Check Slack alert, rerun DAG                            |
+| Snowflake bill spikes            | Warehouse left running   | Confirm `auto-suspend=60s` in `snowflake/warehouse.sql` |
+
+</details>
+
+---
+
+## 🤝 Contributing
+
+1. **Fork** the repo & create a feature branch.
 2. Run `pre-commit install` (black, flake8, sqlfluff).
-3. Open a PR with a concise description—screenshots welcome.
+3. Open a PR with a concise description — screenshots encouraged.
+
+*Any improvement — docs, tests, typofix — is welcome!* 💚
 
 ---
 
-## 11 · License
+## 📝 License
 
-MIT. See `LICENSE`.
+This project is licensed under the [MIT License](LICENSE).
 
 ---
 
-## 12 · Maintainers
+## 👥 Maintainers
 
-| Name      | Role     | Contact                 |
-| --------- | -------- | ----------------------- |
-| Your Name | Lead Dev | `@your-handle` on Slack |
-| …         | …        | …                       |
+|  Name       |  Role      |  Contact                 |
+| ----------- | ---------- | ------------------------ |
+|  Your Name  |  Lead Dev  |  `@your-handle` on Slack |
+|  …          |  …         |  …                       |
 
-*Got questions?* Open an issue—no PR is too small.
+Have a question? [Open an issue](../../issues) — no PR is too small.
